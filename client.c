@@ -55,7 +55,7 @@ int main(int argc, char *argv[])
     // fgets(buffer,255,stdin); //read message
 
     memset(buffer,0, 1000);
-    fgets(buffer,999,argv[3]);   //read message
+    strcpy(buffer, argv[3]);   //read message
 
     n = write(sockfd,buffer,strlen(buffer)); //write to the socket
     if (n < 0) 
