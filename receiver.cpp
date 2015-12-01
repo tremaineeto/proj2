@@ -46,18 +46,20 @@ int main(int argc, char *argv[])
     bcopy((char *)server->h_addr, (char *)&serv_addr.sin_addr.s_addr, server->h_length);
     serv_addr.sin_port = htons(portno);
     
-    if (connect(sockfd,(struct sockaddr *)&serv_addr,sizeof(serv_addr)) < 0) //establish a connection to the server
-        error("ERROR connecting");
-    
-    printf("Please enter the message: ");
-    
-    // memset(buffer,0, 256);
-    // fgets(buffer,255,stdin); //read message
+    // Build Request
+    struct packet outgoing;
+    memset((char *) &outgoing, 0, sizeof(packet));
+    outgoing.build_request_packet(argv[3]);     // Enter filename into data of request packet
 
+    if (sendto(sockfd, &outgoing, sizeof(packet), 0, (struct sockaddr*) &serv_addr, sizeof(serv_addr)) < 0) {
+        error("ERROR sending request to server!\n");
+    }
+    
     memset(buffer,0, 1000);
     strcpy(buffer, argv[3]);   //read message
 
     n = write(sockfd,buffer,strlen(buffer)); //write to the socket
+    // n = write(sockfd,buffer,strlen(buffer)); //write to the socket
     if (n < 0) 
          error("ERROR writing to socket");
     
