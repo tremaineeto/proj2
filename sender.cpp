@@ -25,6 +25,8 @@
 #include <sstream>
 #include <stdbool.h>
 
+#include "packet.h"
+
 void error(char *msg)
 {
     perror(msg);
@@ -33,7 +35,7 @@ void error(char *msg)
 
 int main(int argc, char *argv[])
 {
-    int sockfd, newsockfd, portno, pid;
+    int sockfd, newsockfd, portno, pid, n;
     socklen_t clilen;
     struct sockaddr_in serv_addr, cli_addr;
     
@@ -41,8 +43,8 @@ int main(int argc, char *argv[])
         fprintf(stderr,"ERROR, no port provided\n");
         exit(1);
     }
-    sockfd = socket(AF_INET, SOCK_STREAM, 0);  // TODO: SOCK_STREAM to SOCK_DGRAM?
-    //  fcntl(sockfd, F_SETFL, O_NONBLOCK);
+    sockfd = socket(AF_INET, SOCK_DGRAM, 0);  
+
     if (sockfd < 0)
         error("ERROR opening socket");
     memset((char *) &serv_addr, 0, sizeof(serv_addr));  //reset memory
@@ -58,54 +60,57 @@ int main(int argc, char *argv[])
     
     listen(sockfd,5);  //5 simultaneous connection at most
     
+    struct packet incoming, outgoing;
+  
     while (1) {
         clilen = sizeof(cli_addr);
-        newsockfd = accept(sockfd, (struct sockaddr *) &cli_addr, &clilen);     // add this code to infinite while
-    
-        if (newsockfd < 0)
-            error("ERROR on accept");
-    
-        pid = fork(); // forks a new process
-        if (pid < 0)
-            error("ERROR on fork");
-    
-        if (pid == 0)  { // pid resulting from fork()
-            close(sockfd);
-            int buffer_length = 1000;   // our own reasonable buffer length
-    
-            int n;
-            char buffer[1000];
-            char *response_buffer, *file_name;
-            response_buffer = (char*) calloc(buffer_length, sizeof(char));      // calloc for safety
-            int rb_len = 0;
-    
-            memset(buffer, 0, 1000);  //reset memory
-    
-            //read client's message
-            n = read(newsockfd,buffer,1000);
-            if (n < 0) error("ERROR reading from socket");
-            printf("Here is the filename:\n%s\n\n",buffer);
-            
-            std::ifstream request(buffer, std::ios::in | std::ios::binary);
-
-            // Create response
-            // parse(buffer, &response_buffer, &buffer_length);
-            
-            if (request) {
-                printf("Success! File name found");
-            }
-            else {
-                printf("Unsuccessful! File name not found.");
-            }
-    
-            //reply to client
-            n = write(newsockfd, response_buffer, buffer_length);
-            if (n < 0) error("ERROR writing to socket");
-    
-            exit(0);
+      //   if (recvfrom(sockfd, &incoming, sizeof(packet), 0, (struct sockaddr*) &cli_addr, sizeof(cli_addr)) < 0) {
+        //   error("File request lost.\n");
+        //   continue;
+        // }
+        printf("GOT THIS FAR\n");
+        n = recvfrom(sockfd, &incoming, sizeof(packet), 0, (struct sockaddr*) &cli_addr, &clilen);
+        printf("GOT THIS FAR\n");
+        while (n < 0) {
+        	printf("Packet loss.\n");
+        	n = recvfrom(sockfd, &incoming, sizeof(packet), 0, (struct sockaddr*) &cli_addr, &clilen);	
         }
-        else // returns the child's pid to the parent
-            close(newsockfd);
+          
+        printf("packet type: %c\n", incoming.type);
+        printf("packet seqNum: %d\n", incoming.seqNum);
+        printf("packet size: %d\n", incoming.size);
+        printf("packet data: %s\n", incoming.data);
+        
+        
+//         char buffer[1000];
+//         char *response_buffer, *file_name;
+//         response_buffer = (char*) calloc(buffer_length, sizeof(char));      // calloc for safety
+//         int rb_len = 0;
+
+//         memset(buffer, 0, 1000);  //reset memory
+
+//         //read client's message
+//         n = read(newsockfd,buffer,1000);
+//         if (n < 0) error("ERROR reading from socket");
+//         printf("Here is the filename:\n%s\n\n",buffer);
+        
+//         std::ifstream request(buffer, std::ios::in | std::ios::binary);
+
+//         // Create response
+//         // parse(buffer, &response_buffer, &buffer_length);
+        
+//         if (request) {
+//             printf("Success! File name found");
+//         }
+//         else {
+//             printf("Unsuccessful! File name not found.");
+//         }
+
+//         //reply to client
+//         n = write(newsockfd, response_buffer, buffer_length);
+//         if (n < 0) error("ERROR writing to socket");
+
+        // exit(0);
     }
     return 0;
 }

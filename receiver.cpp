@@ -11,6 +11,8 @@
 #include <stdlib.h>
 #include <strings.h>
 
+#include "packet.h"
+
 void error(char *msg)
 {
     perror(msg);
@@ -55,24 +57,24 @@ int main(int argc, char *argv[])
         error("ERROR sending request to server!\n");
     }
     
-    memset(buffer,0, 1000);
-    strcpy(buffer, argv[3]);   //read message
+    // memset(buffer,0, 1000);
+    // strcpy(buffer, argv[3]);   //read message
 
-    n = write(sockfd,buffer,strlen(buffer)); //write to the socket
     // n = write(sockfd,buffer,strlen(buffer)); //write to the socket
-    if (n < 0) 
-         error("ERROR writing to socket");
+    // // n = write(sockfd,buffer,strlen(buffer)); //write to the socket
+    // if (n < 0) 
+    //      error("ERROR writing to socket");
     
-    // memset(buffer,0,256);
-    // n = read(sockfd,buffer,255); //read from the socket
+    // // memset(buffer,0,256);
+    // // n = read(sockfd,buffer,255); //read from the socket
 
-    memset(buffer,0,1000);
-    n = read(sockfd,buffer,999); //read from the socket
-    if (n < 0) 
-         error("ERROR reading from socket");
-    printf("%s\n",buffer);	//print server's response
+    // memset(buffer,0,1000);
+    // n = read(sockfd,buffer,999); //read from the socket
+    // if (n < 0) 
+    //      error("ERROR reading from socket");
+    // printf("%s\n",buffer);	//print server's response
     
-    close(sockfd); //close socket
+    // close(sockfd); //close socket
     
     return 0;
 }
