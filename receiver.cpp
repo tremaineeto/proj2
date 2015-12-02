@@ -50,31 +50,20 @@ int main(int argc, char *argv[])
     
     // Build Request
     struct packet outgoing;
-    memset((char *) &outgoing, 0, sizeof(packet));
+    memset((char *) &outgoing, 0, sizeof(packet));w
+    
     outgoing.build_request_packet(argv[3]);     // Enter filename into data of request packet
+    
+    socklen_t servLen;
 
-    if (sendto(sockfd, &outgoing, sizeof(packet), 0, (struct sockaddr*) &serv_addr, sizeof(serv_addr)) < 0) {
+    if (sendto(sockfd, &outgoing, sizeof(outgoing), 0, (struct sockaddr*) &serv_addr, servLen) < 0) {
         error("ERROR sending request to server!\n");
     }
     
-    memset(buffer,0, 1000);
-    strcpy(buffer, argv[3]);   //read message
-
-    //n = write(sockfd,buffer,strlen(buffer)); //write to the socket
-    // n = write(sockfd,buffer,strlen(buffer)); //write to the socket
-   // if (n < 0)
-        //error("ERROR writing to socket");
+    // memset(buffer,0, 1000);
+    // strcpy(buffer, argv[3]);   //read message
     
-    // memset(buffer,0,256);
-    // n = read(sockfd,buffer,255); //read from the socket
-
-    memset(buffer,0,1000);
-    //n = read(sockfd,buffer,999); //read from the socket
-    //if (n < 0)
-    //     error("ERROR reading from socket");
-    printf("%s\n",buffer);	//print server's response
-    
-    close(sockfd); //close socket
+    // close(sockfd); //close socket
     
     return 0;
 }

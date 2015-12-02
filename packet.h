@@ -1,5 +1,6 @@
 #include <strings.h>
-#include <string>
+#include <string.h>
+#include <stdio.h>
 #include <iostream>
 using namespace std;
 
@@ -15,6 +16,8 @@ struct packet {
   int seqNum;   // Sequence number
   int size;     // Size of packet data
   char data[MAX_PACKET_SIZE];
+
+  void build_request_packet(char * filename);
 };
 
 void packet::build_request_packet(char *filename) {
