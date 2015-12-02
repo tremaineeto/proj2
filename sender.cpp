@@ -108,8 +108,7 @@ int main(int argc, char *argv[])
 				
 				outgoing.build_packet('D', packet_number + last_acked, "Valid filename.\n");		// added last_acked
 
-				//outgoing.build_packet('D', packet_number, "Valid filename.\n");		// added last_acked
-
+				// added:
 
 				int tempPacketAllocation = outgoing.seqNum * MAX_PACKET_SIZE;
 
@@ -141,7 +140,7 @@ int main(int argc, char *argv[])
 		// now have to send the 'F' for FIN
 		memset((char *) &outgoing, 0, sizeof(struct packet));
 		outgoing.build_packet('F', 0, "FIN");	
-		
+
 		if (sendto(sockfd, &outgoing, sizeof(struct packet), 0, (struct sockaddr*) &cli_addr, clilen) < 0) {
 			error("ERROR sending FIN.\n");
 		}
