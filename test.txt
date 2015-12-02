@@ -1,5 +1,1 @@
-<<<<<<< HEAD
-helloworld
-=======
-asdfs
->>>>>>> 4a8b8e985b1764efb61a2f138df149168a9df656
+===helloworld===

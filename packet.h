@@ -17,13 +17,12 @@ struct packet {
   int size;     // Size of packet data
   char data[MAX_PACKET_SIZE];
 
-  void build_request_packet(char * filename);
+  void build_packet(char desired_type, int des_seqNum, char * buffer);
 };
 
-void packet::build_request_packet(char *filename) {
-  type = 'R';
-  seqNum = 0;
-  size = strlen(filename) + 1;
-  strcpy(data, filename);
+void packet::build_packet(char desired_type, int des_seqNum, char * buffer) {
+  type = desired_type;
+  seqNum = des_seqNum;
+  size = strlen(buffer);
+  strcpy(data, buffer);
 }
-

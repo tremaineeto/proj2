@@ -29,87 +29,122 @@
 
 void error(char *msg)
 {
-    perror(msg);
-    exit(1);
+	perror(msg);
+	exit(1);
 }
 
 int main(int argc, char *argv[])
 {
-    int sockfd, newsockfd, portno, pid, n;
-    socklen_t clilen;
-    struct sockaddr_in serv_addr, cli_addr;
-    
-    if (argc < 2) {
-        fprintf(stderr,"ERROR, no port provided\n");
-        exit(1);
-    }
-    sockfd = socket(AF_INET, SOCK_DGRAM, 0);  
+	int sockfd, newsockfd, portno, pid, n;
+	socklen_t clilen;
+	struct sockaddr_in serv_addr, cli_addr;
+	FILE *filename;
+	
+	if (argc < 2) {
+		fprintf(stderr,"ERROR, no port provided\n");
+		exit(1);
+	}
+	sockfd = socket(AF_INET, SOCK_DGRAM, 0);  
 
-    if (sockfd < 0)
-        error("ERROR opening socket");
-    memset((char *) &serv_addr, 0, sizeof(serv_addr));  //reset memory
-    //fill in address info
-    portno = atoi(argv[1]);
-    serv_addr.sin_family = AF_INET;
-    serv_addr.sin_addr.s_addr = INADDR_ANY;
-    serv_addr.sin_port = htons(portno);
-    
-    if (bind(sockfd, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0)
-        error("ERROR on binding");
-    
-    listen(sockfd,5);  //5 simultaneous connection at most
-    
-    struct packet incoming, outgoing;
+	if (sockfd < 0)
+		error("ERROR opening socket");
+	memset((char *) &serv_addr, 0, sizeof(serv_addr));  //reset memory
+	//fill in address info
+	portno = atoi(argv[1]);
+	serv_addr.sin_family = AF_INET;
+	serv_addr.sin_addr.s_addr = INADDR_ANY;
+	serv_addr.sin_port = htons(portno);
+	
+	if (bind(sockfd, (struct sockaddr *) &serv_addr,
+			 sizeof(serv_addr)) < 0)
+		error("ERROR on binding");
+	
+	listen(sockfd,5);  //5 simultaneous connection at most
+	
+	struct packet incoming, outgoing;
   
-    while (1) {
-        clilen = sizeof(cli_addr);
-      //   if (recvfrom(sockfd, &incoming, sizeof(packet), 0, (struct sockaddr*) &cli_addr, sizeof(cli_addr)) < 0) {
-        //   error("File request lost.\n");
-        //   continue;
-        // }
-        printf("GOT THIS FAR\n");
-        n = recvfrom(sockfd, &incoming, sizeof(packet), 0, (struct sockaddr*) &cli_addr, &clilen);
-        printf("GOT THIS FAR\n");
-        while (n < 0) {
-        	printf("Packet loss.\n");
-        	n = recvfrom(sockfd, &incoming, sizeof(packet), 0, (struct sockaddr*) &cli_addr, &clilen);	
-        }
-          
-        printf("packet type: %c\n", incoming.type);
-        printf("packet seqNum: %d\n", incoming.seqNum);
-        printf("packet size: %d\n", incoming.size);
-        printf("packet data: %s\n", incoming.data);
-        
-        
-//         char buffer[1000];
-//         char *response_buffer, *file_name;
-//         response_buffer = (char*) calloc(buffer_length, sizeof(char));      // calloc for safety
-//         int rb_len = 0;
+	clilen = sizeof(cli_addr);
 
-//         memset(buffer, 0, 1000);  //reset memory
+	while (1) {
+		printf("\nWaiting for request...\n");
+		if (recvfrom(sockfd, &incoming, sizeof(struct packet), 0, (struct sockaddr*) &cli_addr, &clilen) < 0) {
+			error("ERROR receiving request.\n");
+		}
+		  
+		printf("packet type: %c\n", incoming.type);
+		printf("packet seqNum: %d\n", incoming.seqNum);
+		printf("packet size: %d\n", incoming.size);
+		printf("packet data: %s\n", incoming.data);
+		
+		//std::ifstream request(incoming.data, std::ios::in | std::ios::binary);
 
-//         //read client's message
-//         n = read(newsockfd,buffer,1000);
-//         if (n < 0) error("ERROR reading from socket");
-//         printf("Here is the filename:\n%s\n\n",buffer);
-        
-//         std::ifstream request(buffer, std::ios::in | std::ios::binary);
 
-//         // Create response
-//         // parse(buffer, &response_buffer, &buffer_length);
-        
-//         if (request) {
-//             printf("Success! File name found");
-//         }
-//         else {
-//             printf("Unsuccessful! File name not found.");
-//         }
+		printf("Client requesting filename '%s': ", incoming.data);
 
-//         //reply to client
-//         n = write(newsockfd, response_buffer, buffer_length);
-//         if (n < 0) error("ERROR writing to socket");
+		filename = fopen(incoming.data, "rb");
+		//printf("hi");
 
-        // exit(0);
-    }
-    return 0;
+		if(filename) {
+			int packets_needed;
+
+			// Determine how many packets are needed for file
+			struct stat file_info;
+			stat(incoming.data, &file_info);
+			if (file_info.st_size % MAX_PACKET_SIZE) {
+				packets_needed = (file_info.st_size / MAX_PACKET_SIZE ) + 1;
+			}
+			else {
+				packets_needed = (file_info.st_size / MAX_PACKET_SIZE );
+			}
+			
+			printf("File found. %d packet(s) will be needed.\n", packets_needed);
+			printf("**********************************************\n");
+			
+			int packet_number = 0;
+			int last_acked = 0;
+
+			while (packet_number < packets_needed) {
+				memset((char *) &outgoing, 0, sizeof(struct packet));
+				
+				outgoing.build_packet('D', packet_number + last_acked, "Valid filename.\n");		// added last_acked
+
+				//outgoing.build_packet('D', packet_number, "Valid filename.\n");		// added last_acked
+
+
+				int tempPacketAllocation = outgoing.seqNum * MAX_PACKET_SIZE;
+
+				fseek(filename, tempPacketAllocation, SEEK_SET);
+
+				outgoing.size = fread(outgoing.data, 1, MAX_PACKET_SIZE, filename);
+
+				if (sendto(sockfd, &outgoing, sizeof(struct packet), 0, (struct sockaddr*) &cli_addr, clilen) < 0) {
+					error("ERROR sending message to client.\n");
+				}
+
+				// print the packet stuff here
+				printf("PACKET TYPE: %c\t | SEQNUM: %d\t | SIZE: %d\t", outgoing.type, outgoing.seqNum, outgoing.size);
+
+				packet_number++;
+			}
+		}
+		else {
+			printf("File not found. Sending FIN.\n", incoming.data);
+			printf("**********************************************\n");
+			memset((char *) &outgoing, 0, sizeof(struct packet));
+			outgoing.build_packet('F', 0, "File Not Found.");	// File not found; send FIN message
+
+			if (sendto(sockfd, &outgoing, sizeof(struct packet), 0, (struct sockaddr*) &cli_addr, clilen) < 0) {
+				error("ERROR sending message to client.\n");
+			}
+		}
+
+		// now have to send the 'F' for FIN
+		memset((char *) &outgoing, 0, sizeof(struct packet));
+		outgoing.build_packet('F', 0, "FIN");	
+		
+		if (sendto(sockfd, &outgoing, sizeof(struct packet), 0, (struct sockaddr*) &cli_addr, clilen) < 0) {
+			error("ERROR sending FIN.\n");
+		}
+	}
+	return 0;
 }
