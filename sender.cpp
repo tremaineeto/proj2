@@ -45,7 +45,7 @@ int main(int argc, char *argv[])
 	struct timeval timeout = {1, 0}; // tv_sec and tv_usec
 	
 	if (argc < 5) {
-		fprintf(stderr,"Usage: ./sender <Port> <Window Size> <Loss Prob> <Corrupt Prob>\n");			// TODO: eventually add window_size, loss_prob, corrupt_prob
+		fprintf(stderr,"Usage: %s <Port> <Window Size> <Loss Prob> <Corrupt Prob>\n", argv[0]);
 		exit(1);
 	}
 	sockfd = socket(AF_INET, SOCK_DGRAM, 0);  
@@ -137,7 +137,7 @@ int main(int argc, char *argv[])
 					error("ERROR during select call");
 				}
 
-				else if (FD_ISSET(sockfd, &readfds) == true) {
+				else if (FD_ISSET(sockfd, &readfds)) {
 					if (recvfrom(sockfd, &incoming, sizeof(struct packet), 0, (struct sockaddr*) &cli_addr, &clilen) < 0) {
 						error("ERROR receiving packet.\n");
 						packet_number = 0;
@@ -158,7 +158,8 @@ int main(int argc, char *argv[])
 						packet_number = 0;
 						continue;
 					}
-					// CHECK IF ACK
+
+					// CHECK ACK
 					if (incoming.type == 'A') {		// ACK!
 						printf("**********************************************\n");
 						printf("\t\tACK RECEIVED\n");
@@ -176,33 +177,25 @@ int main(int argc, char *argv[])
 						else if (incoming.seqNum < last_acked) {						// seqNum too low
 							printf("GBN: Window not slided; ACK not expected. seqNum: %d\n", incoming.seqNum);
 						}
-
 					}
 					else {			// NOT AN ACK!
 						printf("**********************************************\n");
 						printf("GBN: Window not slided; NOT AN ACK. seqNum: %d\n", incoming.seqNum);
 					}
 
-					// WINDOW MANAGEMENT
-					if (packet_number > incoming.seqNum) {
-						printf("\nDon't slide window; ACK not expected. seqNum: %d\n", incoming.seqNum);
-					}
+					// // WINDOW MANAGEMENT
+					// if (packet_number > incoming.seqNum) {
+					// 	printf("\nDon't slide window; ACK not expected. seqNum: %d\n", incoming.seqNum);
+					// }
 				}
 
 				else {
-					if (packets_needed <= last_acked + packet_number) {
-						continue;
-					}
-					
-					else if (window_size <= packet_number) {
-						printf("\nERROR on the last_acked value %d", last_acked);
-					 packet_number = 0;
-					}
-					else if (packets_needed <= packet_number + last_acked) {
-						printf("\nERROR on the last_acked value %d", last_acked);
+					if (packet_number >= window_size || last_acked + packet_number >= packets_needed) {
+						printf("**********************************************\n");
+						printf("Packet timed out. seqNum: %d\n", last_acked);
 						packet_number = 0;
 					}
-
+					if (last_acked + packet_number >= packets_needed) continue;	// Past end of file
 					memset((char *) &outgoing, 0, sizeof(struct packet));
 					
 					outgoing.build_packet('D', packet_number + last_acked, "");		// added last_acked
@@ -222,6 +215,7 @@ int main(int argc, char *argv[])
 					printf("Packet type: %c\n", outgoing.type);
 					printf("Packet seqNum: %d\n", outgoing.seqNum);
 					printf("Packet size: %d\n", outgoing.size);
+					packet_number++;
 				}
 			}
 		}

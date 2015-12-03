@@ -22,19 +22,26 @@ void error(char *msg)
 int main(int argc, char *argv[])
 {
 	int sockfd; //Socket descriptor
-	int portno, n;
+	int portno, n, p_loss, p_corrupt;
 	socklen_t servlen;
 	struct sockaddr_in serv_addr;
 	FILE *filename;
 	srand(time(NULL));		// added
 	struct hostent *server; //contains tons of information, including the server's IP address
 	// Packet buffer should fit up to 1KB
-	if (argc < 4) {
-	   fprintf(stderr,"usage %s hostname portnumber filename\n", argv[0]);
-	   exit(0);
+	if (argc < 6) {
+		fprintf(stderr,"Usage: %s <Host> <Port> <Filename> <Loss Prob> <Corrupt Prob>\n", argv[0]);
+		exit(0);
 	}
 	
 	portno = atoi(argv[2]);
+	p_loss = atof(argv[4]);
+	p_corrupt = atof(argv[5]);
+
+	if (portno < 0) error("ERROR invalid Port number\n");
+	if (p_loss < 0.0 || p_loss > 1.0) error("ERROR invalid Loss Prob (must be between 0.0 and 1.0)\n");
+	if (p_corrupt < 0.0 || p_corrupt > 1.0) error("ERROR invalid Corrupt Prob (must be between 0.0 and 1.0)\n");
+
 	sockfd = socket(AF_INET, SOCK_DGRAM, 0); //create a new socket
 	if (sockfd < 0) 
 		error("ERROR opening socket");
@@ -69,12 +76,32 @@ int main(int argc, char *argv[])
 	int seqNum_needed = 0;
 	char *teststring = argv[3];
 	filename = fopen(strcat(argv[3], "_copy"), "wb");
-	printf("%s\n", argv[3]);
-	if (recvfrom(sockfd, &incoming, sizeof(struct packet), 0, (struct sockaddr*) &serv_addr, &servlen) < 0) {
-		error("ERROR receiving reply from server!\n");
-	}
+	
 	while (1) {
+		if (recvfrom(sockfd, &incoming, sizeof(struct packet), 0, (struct sockaddr*) &serv_addr, &servlen) < 0) {
+			error("ERROR receiving reply from server!\n");
+		}
 		if (incoming.type == 'F') break;	// When we receive a FIN message, transfer is done
+		// SIMULATED LOSS
+		if ( ((float)rand()/(float)RAND_MAX) < p_loss) {
+			printf("**********************************************\n");
+			printf("Lost packet (Simulated). seqNum: %d\n", incoming.seqNum);
+			continue;
+		}
+		// SIMULATED CORRUPTION
+		if ( ((float)rand()/(float)RAND_MAX) < p_corrupt) {
+			printf("**********************************************\n");
+			printf("Packet corrupted (Simulated). seqNum: %d\n", incoming.seqNum);
+			if (sendto(sockfd, &outgoing, sizeof(struct packet), 0, (struct sockaddr*) &serv_addr, servlen) < 0) {
+				error("ERROR sending ACK to server!\n");
+			}
+			printf("ACK RESENT\n");
+			printf("Packet type: %c\n", outgoing.type);
+			printf("Packet seqNum: %d\n", outgoing.seqNum);
+			printf("Packet size: %d\n", outgoing.size);
+			continue;
+		}
+
 		printf("**********************************************\n");
 		printf("\t\tPACKET RECEIVED\n");
 		printf("\t\tPacket type: %c\n", incoming.type);
@@ -114,14 +141,6 @@ int main(int argc, char *argv[])
 		printf("Packet type: %c\n", outgoing.type);
 		printf("Packet seqNum: %d\n", outgoing.seqNum);
 		printf("Packet size: %d\n", outgoing.size);
-
-
-		/**********************
-		 * RECIEVE NEXT MESSAGE
-		 *********************/
-		if (recvfrom(sockfd, &incoming, sizeof(struct packet), 0, (struct sockaddr*) &serv_addr, &servlen) < 0) {
-			error("ERROR receiving reply from server!\n");
-		}
 	}
 	printf("**********************************************\n");
 	printf("Received FIN message.\nMessage: %s\n", incoming.data);
