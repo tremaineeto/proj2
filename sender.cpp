@@ -36,7 +36,7 @@ void error(char *msg)
 int main(int argc, char *argv[])
 {
 	int sockfd, newsockfd, portno, pid, n, window_size;
-	float p_loss, p_corrupt;
+	double p_loss, p_corrupt;
 	socklen_t clilen;
 	struct sockaddr_in serv_addr, cli_addr;
 	FILE *filename;
@@ -145,14 +145,14 @@ int main(int argc, char *argv[])
 					}
 
 					// SIMULATED LOSS
-					if ( ((float)rand()/(float)RAND_MAX) < p_loss) {
+					if ( ((double)rand()/(double)RAND_MAX) < p_loss) {
 						printf("**********************************************\n");
 						printf("Lost packet (Simulated). seqNum: %d\n", incoming.seqNum);
 						packet_number = 0;
 						continue;
 					}
 					// SIMULATED CORRUPTION
-					if ( ((float)rand()/(float)RAND_MAX) < p_corrupt) {
+					if ( ((double)rand()/(double)RAND_MAX) < p_corrupt) {
 						printf("**********************************************\n");
 						printf("Packet corrupted (Simulated). seqNum: %d\n", incoming.seqNum);
 						packet_number = 0;
@@ -176,9 +176,9 @@ int main(int argc, char *argv[])
 							// else {
 							// 	packet_number = packet_number - (incoming.seqNum - last_acked);
 							// }
+							packet_number = 0;
 							last_acked = incoming.seqNum + 1;
 							printf("GBN: Window slid over. Now at %d out of %d\n", last_acked, packets_needed);
-							packet_number = 0;
 						}
 						else if (incoming.seqNum < last_acked) {						// seqNum too low
 							printf("GBN: Window not slided; ACK not expected. seqNum: %d\n", incoming.seqNum);
@@ -273,6 +273,7 @@ int main(int argc, char *argv[])
 					printf("\t\tPacket type: %c\n", incoming.type);
 					printf("\t\tPacket seqNum: %d\n", incoming.seqNum);
 					printf("\t\tPacket size: %d\n", incoming.size);
+					printf("Not FIN ACK.\n");
 					printf("**********************************************\n");
 					printf("FIN RESENT\n");
 					printf("Packet type: %c\n", outgoing.type);

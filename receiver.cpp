@@ -10,7 +10,7 @@
 #include <netdb.h>      // define structures like hostent
 #include <stdlib.h>
 #include <strings.h>
-
+#include <unistd.h>
 #include "packet.h"
 
 void error(char *msg)
@@ -22,7 +22,8 @@ void error(char *msg)
 int main(int argc, char *argv[])
 {
 	int sockfd; //Socket descriptor
-	int portno, n, p_loss, p_corrupt;
+	int portno, n;
+	double p_loss, p_corrupt;
 	socklen_t servlen;
 	struct sockaddr_in serv_addr;
 	FILE *filename;
@@ -39,7 +40,6 @@ int main(int argc, char *argv[])
 	portno = atoi(argv[2]);
 	p_loss = atof(argv[4]);
 	p_corrupt = atof(argv[5]);
-
 	if (portno < 0) error("ERROR invalid Port number\n");
 	if (p_loss < 0.0 || p_loss > 1.0) error("ERROR invalid Loss Prob (must be between 0.0 and 1.0)\n");
 	if (p_corrupt < 0.0 || p_corrupt > 1.0) error("ERROR invalid Corrupt Prob (must be between 0.0 and 1.0)\n");
@@ -99,15 +99,13 @@ int main(int argc, char *argv[])
 			}
 			if (incoming.type == 'F') break;	// When we receive a FIN message, transfer is done
 			// SIMULATED LOSS
-			if ( ((float)rand()/(float)RAND_MAX) < p_loss) {
-				printf("PLOSS\n");
+			if ( ((double)rand()/(double)RAND_MAX) < p_loss) {
 				printf("**********************************************\n");
 				printf("Lost packet (Simulated). seqNum: %d\n", incoming.seqNum);
 				continue;
 			}
 			// SIMULATED CORRUPTION
-			if ( ((float)rand()/(float)RAND_MAX) < p_corrupt) {
-				printf("PCORR\n");
+			if ( ((double)rand()/(double)RAND_MAX) < p_corrupt) {
 				printf("**********************************************\n");
 				printf("Packet corrupted (Simulated). seqNum: %d\n", incoming.seqNum);
 				if (sendto(sockfd, &outgoing, sizeof(struct packet), 0, (struct sockaddr*) &serv_addr, servlen) < 0) {
