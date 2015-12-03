@@ -170,6 +170,12 @@ int main(int argc, char *argv[])
 							printf("GBN: Window not slided; ACK not expected. seqNum: %d\n", incoming.seqNum);
 						}
 						else if (incoming.seqNum >= last_acked) {						// seqNum acceptable
+							// if (incoming.seqNum - last_acked > packet_number) {
+							// 	packet_number = 0;
+							// }
+							// else {
+							// 	packet_number = packet_number - (incoming.seqNum - last_acked);
+							// }
 							last_acked = incoming.seqNum + 1;
 							printf("GBN: Window slid over. Now at %d out of %d\n", last_acked, packets_needed);
 							packet_number = 0;
@@ -182,11 +188,6 @@ int main(int argc, char *argv[])
 						printf("**********************************************\n");
 						printf("GBN: Window not slided; NOT AN ACK. seqNum: %d\n", incoming.seqNum);
 					}
-
-					// // WINDOW MANAGEMENT
-					// if (packet_number > incoming.seqNum) {
-					// 	printf("\nDon't slide window; ACK not expected. seqNum: %d\n", incoming.seqNum);
-					// }
 				}
 
 				else {
@@ -195,7 +196,7 @@ int main(int argc, char *argv[])
 						printf("Packet timed out. seqNum: %d\n", last_acked);
 						packet_number = 0;
 					}
-					if (last_acked + packet_number >= packets_needed) continue;	// Past end of file
+					if (last_acked >= packets_needed) break;	// All packets have been ACKed
 					memset((char *) &outgoing, 0, sizeof(struct packet));
 					
 					outgoing.build_packet('D', packet_number + last_acked, "");		// added last_acked
