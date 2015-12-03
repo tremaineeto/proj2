@@ -35,7 +35,8 @@ void error(char *msg)
 
 int main(int argc, char *argv[])
 {
-	int sockfd, newsockfd, portno, pid, n;
+	int sockfd, newsockfd, portno, pid, n, window_size;
+	float p_loss, p_corrupt;
 	socklen_t clilen;
 	struct sockaddr_in serv_addr, cli_addr;
 	FILE *filename;
@@ -43,8 +44,8 @@ int main(int argc, char *argv[])
 	fd_set readfds;
 	struct timeval timeout = {1, 0}; // tv_sec and tv_usec
 	
-	if (argc < 2) {
-		fprintf(stderr,"ERROR, no port provided\n");			// TODO: eventually add window_size, loss_prob, corrupt_prob
+	if (argc < 5) {
+		fprintf(stderr,"Usage: ./sender <Port> <Window Size> <Loss Prob> <Corrupt Prob>\n");			// TODO: eventually add window_size, loss_prob, corrupt_prob
 		exit(1);
 	}
 	sockfd = socket(AF_INET, SOCK_DGRAM, 0);  
@@ -54,9 +55,15 @@ int main(int argc, char *argv[])
 	memset((char *) &serv_addr, 0, sizeof(serv_addr));  //reset memory
 	//fill in address info
 	portno = atoi(argv[1]);
-	// TODO: add window argument
-	// TODO: add loss probability argument
-	// TODO: add corruption probability argument
+	window_size = atoi(argv[2]);
+	p_loss = atof(argv[3]);
+	p_corrupt = atof(argv[4]);
+
+	if (portno < 0) error("ERROR invalid Port number\n");
+	if (window_size < 0) error("ERROR invalid Window Size (must be at least 1)\n");
+	if (p_loss < 0.0 || p_loss > 1.0) error("ERROR invalid Loss Prob (must be between 0.0 and 1.0)\n");
+	if (p_corrupt < 0.0 || p_corrupt > 1.0) error("ERROR invalid Corrupt Prob (must be between 0.0 and 1.0)\n");
+
 	serv_addr.sin_family = AF_INET;
 	serv_addr.sin_addr.s_addr = INADDR_ANY;
 	serv_addr.sin_port = htons(portno);
@@ -72,25 +79,30 @@ int main(int argc, char *argv[])
 	struct packet incoming, outgoing;
   
 	clilen = sizeof(cli_addr);
-
+	
+	printf("\nWaiting for request...\n");
 	while (1) {
-		printf("\nWaiting for request...\n");
 		if (recvfrom(sockfd, &incoming, sizeof(struct packet), 0, (struct sockaddr*) &cli_addr, &clilen) < 0) {
-			error("ERROR receiving request.\n");
+			printf("Packet lost\n");
+			continue;
 		}
-		  
-		printf("Packet type: %c\n", incoming.type);
-		printf("Packet seqNum: %d\n", incoming.seqNum);
-		printf("Packet size: %d\n", incoming.size);
-		printf("Packet data: %s\n", incoming.data);
-		
-		//std::ifstream request(incoming.data, std::ios::in | std::ios::binary);
 
-
+		printf("**********************************************\n");
+		printf("\t\tPACKET RECEIVED\n");
+		printf("\t\tPacket type: %c\n", incoming.type);
+		printf("\t\tPacket seqNum: %d\n", incoming.seqNum);
+		printf("\t\tPacket size: %d\n", incoming.size);
+		printf("\t\tPacket data: %s\n", incoming.data);
+		printf("**********************************************\n");
+		if (incoming.type != 'R') {
+			printf("Not a request packet. Ignoring.\n");
+			printf("**********************************************\n");
+			printf("\nWaiting for request...\n");
+			continue;
+		}
 		printf("Client requesting filename '%s': ", incoming.data);
 
 		filename = fopen(incoming.data, "rb");
-		//printf("hi");
 
 		if(filename) {
 			int packets_needed;
@@ -106,12 +118,11 @@ int main(int argc, char *argv[])
 			}
 			
 			printf("File found. %d packet(s) will be needed.\n", packets_needed);
-			printf("**********************************************\n");
 			
 			int packet_number = 0;
 			int last_acked = 0;
 
-			while (packet_number < packets_needed) {
+			while (last_acked < packets_needed) {	// When last_acked == packets_needed, client has received all data
 
 				FD_ZERO(&readfds);
 				FD_SET(sockfd, &readfds);
@@ -133,42 +144,60 @@ int main(int argc, char *argv[])
 						continue;
 					}
 
-					// TODO: model LOSS
-
-					// TODO: model CORRUPTION
-
-					printf("Packet type: %c\n", incoming.type);
-					printf("Packet seqNum: %d\n", incoming.seqNum);
-					printf("Packet size: %d\n", incoming.size);
-					printf("Packet data: %s\n", incoming.data);
-
-					if (incoming.seqNum >= last_acked) {
-						last_acked = incoming.seqNum + 1;
-						printf("\nGBN: Window slided. Now at %d out of %d\n", packet_number, packets_needed);
+					// SIMULATED LOSS
+					if ( ((float)rand()/(float)RAND_MAX) < p_loss) {
+						printf("**********************************************\n");
+						printf("Lost packet (Simulated). seqNum: %d\n", incoming.seqNum);
 						packet_number = 0;
+						continue;
 					}
-					else if (incoming.type != 'A') {			// ACK!
-						printf("\nDon't slide window; NOT AN ACK. seqNum: %d\n", incoming.seqNum);
+					// SIMULATED CORRUPTION
+					if ( ((float)rand()/(float)RAND_MAX) < p_corrupt) {
+						printf("**********************************************\n");
+						printf("Packet corrupted (Simulated). seqNum: %d\n", incoming.seqNum);
+						packet_number = 0;
+						continue;
+					}
+					// CHECK IF ACK
+					if (incoming.type == 'A') {		// ACK!
+						printf("**********************************************\n");
+						printf("\t\tACK RECEIVED\n");
+						printf("\t\tPacket type: %c\n", incoming.type);
+						printf("\t\tPacket seqNum: %d\n", incoming.seqNum);
+						printf("\t\tPacket size: %d\n", incoming.size);
+						if (incoming.seqNum > last_acked + window_size) {		// seqNum too high
+							printf("GBN: Window not slided; ACK not expected. seqNum: %d\n", incoming.seqNum);
+						}
+						else if (incoming.seqNum >= last_acked) {						// seqNum acceptable
+							last_acked = incoming.seqNum + 1;
+							printf("GBN: Window slid over. Now at %d out of %d\n", last_acked, packets_needed);
+							packet_number = 0;
+						}
+						else if (incoming.seqNum < last_acked) {						// seqNum too low
+							printf("GBN: Window not slided; ACK not expected. seqNum: %d\n", incoming.seqNum);
+						}
+
+					}
+					else {			// NOT AN ACK!
+						printf("**********************************************\n");
+						printf("GBN: Window not slided; NOT AN ACK. seqNum: %d\n", incoming.seqNum);
 					}
 
-					// TODO: UNCOMMENT WHEN YOU DEFINE WINDOWSIZE
-					// else if (incoming.seqNum > packet_number + windowSize) {		// need to define window_size (argv[2])
-						// printf("\nDon't slide window; ACK not expected. seqNum: %d\n", incoming.seqNum);
-					// }
-					else if (packet_number > incoming.seqNum) {
+					// WINDOW MANAGEMENT
+					if (packet_number > incoming.seqNum) {
 						printf("\nDon't slide window; ACK not expected. seqNum: %d\n", incoming.seqNum);
 					}
-				} 
+				}
 
 				else {
 					if (packets_needed <= last_acked + packet_number) {
 						continue;
 					}
-					// TODO: UNCOMMENT WHEN YOU DEFINE WINDOWSIZE
-					// else if (windowSize <= packet_number) {
-					// 	printf("\nERROR on the last_acked value %d", last_acked);
-					//  packet_number = 0;
-					// }
+					
+					else if (window_size <= packet_number) {
+						printf("\nERROR on the last_acked value %d", last_acked);
+					 packet_number = 0;
+					}
 					else if (packets_needed <= packet_number + last_acked) {
 						printf("\nERROR on the last_acked value %d", last_acked);
 						packet_number = 0;
@@ -176,7 +205,7 @@ int main(int argc, char *argv[])
 
 					memset((char *) &outgoing, 0, sizeof(struct packet));
 					
-					outgoing.build_packet('D', packet_number + last_acked, "Valid filename.\n");		// added last_acked
+					outgoing.build_packet('D', packet_number + last_acked, "");		// added last_acked
 
 					int tempPacketAllocation = outgoing.seqNum * MAX_PACKET_SIZE;
 
@@ -188,34 +217,16 @@ int main(int argc, char *argv[])
 						error("ERROR sending message to client.\n");
 					}
 
+					printf("**********************************************\n");
+					printf("PACKET SENT\n");
 					printf("Packet type: %c\n", outgoing.type);
 					printf("Packet seqNum: %d\n", outgoing.seqNum);
 					printf("Packet size: %d\n", outgoing.size);
-					printf("Packet data: %s\n", outgoing.data);
 				}
-
-				// Now, we need to send the FIN
-				printf("Sending FIN.\n", incoming.data);
-				printf("**********************************************\n");
-				memset((char *) &outgoing, 0, sizeof(struct packet));
-				
-				outgoing.build_packet('F', packet_number, "Valid filename.\n");		// added last_acked
-
-				if (sendto(sockfd, &outgoing, sizeof(struct packet), 0, (struct sockaddr*) &cli_addr, clilen) < 0) {
-					error("ERROR sending FIN message.\n");
-				}
-
-				printf("Packet type: %c\n", outgoing.type);
-				printf("Packet seqNum: %d\n", outgoing.seqNum);
-				printf("Packet size: %d\n", outgoing.size);
-				printf("Packet data: %s\n", outgoing.data);
-
-				packet_number++;
 			}
 		}
 		else {
 			printf("File not found. Sending FIN.\n", incoming.data);
-			printf("**********************************************\n");
 			memset((char *) &outgoing, 0, sizeof(struct packet));
 			outgoing.build_packet('F', 0, "File Not Found.");	// File not found; send FIN message
 
@@ -226,18 +237,55 @@ int main(int argc, char *argv[])
 
 		// now have to send the 'F' for FIN
 		memset((char *) &outgoing, 0, sizeof(struct packet));
-		outgoing.build_packet('F', 0, "FIN");	
+		outgoing.build_packet('F', 0, "");	
 
 		if (sendto(sockfd, &outgoing, sizeof(struct packet), 0, (struct sockaddr*) &cli_addr, clilen) < 0) {
 			error("ERROR sending FIN.\n");
 		}
-
+		printf("**********************************************\n");
+		printf("FIN SENT\n");
 		printf("Packet type: %c\n", outgoing.type);
 		printf("Packet seqNum: %d\n", outgoing.seqNum);
 		printf("Packet size: %d\n", outgoing.size);
-		printf("Packet data: %s\n", outgoing.data);
-
-		// TODO: wait for the FIN ACK here
+		
+		// Wait for the FIN ACK here
+		while (1) {
+			FD_ZERO(&readfds);
+			FD_SET(sockfd, &readfds);
+			if (select(sockfd+1, &readfds, NULL, NULL, &timeout) < 0) {
+				error("ERROR on select\n");
+			}
+			else if (FD_ISSET(sockfd, &readfds)) {
+				if (recvfrom(sockfd, &incoming, sizeof(struct packet), 0, (struct sockaddr*) &cli_addr, &clilen) < 0) {
+					printf("Packet lost\n");
+					continue;
+				}
+				if (incoming.type == 'F') {
+					printf("**********************************************\n");
+					printf("\t\tFIN ACK RECEIVED\n");
+					printf("\t\tPacket type: %c\n", incoming.type);
+					printf("\t\tPacket seqNum: %d\n", incoming.seqNum);
+					printf("\t\tPacket size: %d\n", incoming.size);
+					printf("\nWaiting for request...\n");
+					break;
+				}
+				else {
+					if (sendto(sockfd, &outgoing, sizeof(struct packet), 0, (struct sockaddr*) &cli_addr, clilen) < 0) {
+						error("ERROR sending FIN.\n");
+					}
+					printf("**********************************************\n");
+					printf("\t\tPACKET RECEIVED\n");
+					printf("\t\tPacket type: %c\n", incoming.type);
+					printf("\t\tPacket seqNum: %d\n", incoming.seqNum);
+					printf("\t\tPacket size: %d\n", incoming.size);
+					printf("**********************************************\n");
+					printf("FIN RESENT\n");
+					printf("Packet type: %c\n", outgoing.type);
+					printf("Packet seqNum: %d\n", outgoing.seqNum);
+					printf("Packet size: %d\n", outgoing.size);
+				}
+			}
+		}
 	}
 	return 0;
 }

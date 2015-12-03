@@ -21,14 +21,14 @@ void error(char *msg)
 
 int main(int argc, char *argv[])
 {
-
 	int sockfd; //Socket descriptor
 	int portno, n;
 	socklen_t servlen;
 	struct sockaddr_in serv_addr;
+	FILE *filename;
+	srand(time(NULL));		// added
 	struct hostent *server; //contains tons of information, including the server's IP address
 	// Packet buffer should fit up to 1KB
-	char buffer[1000];
 	if (argc < 4) {
 	   fprintf(stderr,"usage %s hostname portnumber filename\n", argv[0]);
 	   exit(0);
@@ -59,30 +59,87 @@ int main(int argc, char *argv[])
 	// Build Request
 	outgoing.build_packet( 'R', 0, argv[3]);     // 'R'equest packet, seqNo 0, w/ filename (argv[3]) in buffer
 
-	printf("SENT:\tType: %c\tSeq No: %d\tSize: %d\tMsg: Requesting filename '%s'\n",
-			outgoing.type, outgoing.seqNum, outgoing.size, outgoing.data);
+
 	printf("**********************************************\n");
+	printf("PACKET SENT\nPacket type: %c\nPacket seqNum: %d\nPacket size: %d\n",
+			outgoing.type, outgoing.seqNum, outgoing.size);
 	if (sendto(sockfd, &outgoing, sizeof(struct packet), 0, (struct sockaddr*) &serv_addr, servlen) < 0) {
 		error("ERROR sending request to server!\n");
 	}
-
+	int seqNum_needed = 0;
+	char *teststring = argv[3];
+	filename = fopen(strcat(argv[3], "_copy"), "wb");
+	printf("%s\n", argv[3]);
 	if (recvfrom(sockfd, &incoming, sizeof(struct packet), 0, (struct sockaddr*) &serv_addr, &servlen) < 0) {
 		error("ERROR receiving reply from server!\n");
 	}
+	while (1) {
+		if (incoming.type == 'F') break;	// When we receive a FIN message, transfer is done
+		printf("**********************************************\n");
+		printf("\t\tPACKET RECEIVED\n");
+		printf("\t\tPacket type: %c\n", incoming.type);
+		printf("\t\tPacket seqNum: %d\n", incoming.seqNum);
+		printf("\t\tPacket size: %d\n", incoming.size);
+		
+		/*******************
+		 * CHECK SEQUENCE NO
+		 ******************/
+		if (incoming.seqNum == seqNum_needed) {
+			if (incoming.type != 'D') {
+				printf("Packet ignored; NOT DATA. seqNum: %d\n", incoming.seqNum);
+				continue;
+			}
+			// This is the packet we're waiting for!
+			fwrite(incoming.data, 1, incoming.size, filename);
+			outgoing.build_packet( 'A', seqNum_needed, "");
+			seqNum_needed++;
+		}
+		else if (incoming.seqNum > seqNum_needed ) {
+			printf("Packet ignored; Wrong seqNum: %d Need: %d\n", incoming.seqNum, seqNum_needed);
+			continue;
+		}
+		else if (incoming.seqNum < seqNum_needed ) {
+			printf("Packet ignored; Wrong seqNum: %d Need: %d\n", incoming.seqNum, seqNum_needed);
+			outgoing.build_packet( 'A', incoming.seqNum, "");
+		}
 
-	// Hasn't received FIN message
-	while (incoming.type != 'F') {
-		printf("packet type: %c\n", incoming.type);
-		printf("packet seqNum: %d\n", incoming.seqNum);
-		printf("packet size: %d\n", incoming.size);
-		printf("packet data: %s\n", incoming.data);
+		/*******************
+		 * SEND ACK MESSAGE
+		 ******************/
+		if (sendto(sockfd, &outgoing, sizeof(struct packet), 0, (struct sockaddr*) &serv_addr, servlen) < 0) {
+			error("ERROR sending ACK to server!\n");
+		}
+		printf("**********************************************\n");
+		printf("ACK SENT\n");
+		printf("Packet type: %c\n", outgoing.type);
+		printf("Packet seqNum: %d\n", outgoing.seqNum);
+		printf("Packet size: %d\n", outgoing.size);
 
+
+		/**********************
+		 * RECIEVE NEXT MESSAGE
+		 *********************/
 		if (recvfrom(sockfd, &incoming, sizeof(struct packet), 0, (struct sockaddr*) &serv_addr, &servlen) < 0) {
 			error("ERROR receiving reply from server!\n");
 		}
 	}
-	
-	printf("Server sent FIN message. Shutting down.\nMessage: %s\n", incoming.data);
 	printf("**********************************************\n");
+	printf("Received FIN message.\nMessage: %s\n", incoming.data);
+
+	/************************
+	 * SEND FIN ACK TO SERVER
+	 ***********************/
+	outgoing.build_packet( 'F', 0, "FIN");
+	if (sendto(sockfd, &outgoing, sizeof(struct packet), 0, (struct sockaddr*) &serv_addr, servlen) < 0) {
+		error("ERROR sending FIN ACK to server!\n");
+	}
+	printf("**********************************************\n");
+	printf("FIN ACK SENT\n");
+	printf("Packet type: %c\n", outgoing.type);
+	printf("Packet seqNum: %d\n", outgoing.seqNum);
+	printf("Packet size: %d\n", outgoing.size);
+	printf("Shutting down.\n");
+
+	fclose(filename);
 	return 0;
 }
