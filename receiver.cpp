@@ -10,6 +10,7 @@
 #include <netdb.h>      // define structures like hostent
 #include <stdlib.h>
 #include <strings.h>
+#include <unistd.h>
 
 #include "packet.h"
 
@@ -22,12 +23,14 @@ void error(char *msg)
 int main(int argc, char *argv[])
 {
 	int sockfd; //Socket descriptor
-	int portno, n, p_loss, p_corrupt;
+	int portno, n;
+	float p_loss, p_corrupt;
 	socklen_t servlen;
 	struct sockaddr_in serv_addr;
 	FILE *filename;
 	srand(time(NULL));		// added
 	fd_set readfds;
+	//string tester;
 	struct timeval timeout = {1, 0}; // tv_sec and tv_usec
 	struct hostent *server; //contains tons of information, including the server's IP address
 	// Packet buffer should fit up to 1KB
@@ -94,11 +97,14 @@ int main(int argc, char *argv[])
 		}
 
 		else if (FD_ISSET(sockfd, &readfds)) {
+
 			if (recvfrom(sockfd, &incoming, sizeof(struct packet), 0, (struct sockaddr*) &serv_addr, &servlen) < 0) {
 				error("ERROR receiving reply from server!\n");
 			}
 			if (incoming.type == 'F') break;	// When we receive a FIN message, transfer is done
 			// SIMULATED LOSS
+
+			//printf("%d", p_loss);
 			if ( ((float)rand()/(float)RAND_MAX) < p_loss) {
 				printf("PLOSS\n");
 				printf("**********************************************\n");
